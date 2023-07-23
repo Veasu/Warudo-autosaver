@@ -118,6 +118,8 @@ public class AutosaverNode  : Node {
     [Label("Disable Toast Popup")]
     public bool disableToast = false;
 
+    public bool isStreaming = false;
+
     protected bool hideWebsocketAuth() {
       if (websocketEnabled) {
         return !websocketAuth;
@@ -216,7 +218,7 @@ public class AutosaverNode  : Node {
           this.BroadcastDataInput(nameof(websocketConnected));
           break;
         case 5:
-          if (message.d.eventType.Equals("StreamStateChanged")) {
+          if (message.d.eventType.Equals("StreamStateChanged") && disableOnStartStream) {
             isEnabled = !message.d.eventData.outputActive;
             this.BroadcastDataInput(nameof(isEnabled));
           }
@@ -306,7 +308,7 @@ public class AutosaverNode  : Node {
     }
 
     public override void OnUpdate() {
-      if (Time.time > nextSave && isEnabled && !disableOnStartStream)
+      if (Time.time > nextSave && isEnabled)
       {
           nextSave = Time.time + saveTimeInSeconds;
           AutoSave();
