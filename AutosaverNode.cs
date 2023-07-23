@@ -148,6 +148,13 @@ public class AutosaverNode  : Node {
 
     [FlowOutput]
     public Continuation OnAutosave;
+
+    [FlowInput]
+    public Continuation Enter() {
+      AutoSave();
+      return OnAutosave;
+    }
+
     private float nextSave = 0; 
 
     private WebSocket _ws;
@@ -156,8 +163,6 @@ public class AutosaverNode  : Node {
     [Hidden]
     [Disabled]
     private string websocketPasswordHidden = "";
-
-    private bool shouldBroadcast = false;
 
     private Action<string> debouncedSocketIP;
     private Action<string> debouncedSocketPort;
@@ -172,12 +177,12 @@ public class AutosaverNode  : Node {
 
         _ws.OnClose += (sender, e) => {
           websocketConnected = false;
-          shouldBroadcast = true;
+          this.BroadcastDataInput(nameof(websocketConnected));
         };
 
         _ws.OnError += (sender, e) => {
           websocketConnected = false;
-          shouldBroadcast = true;
+          this.BroadcastDataInput(nameof(websocketConnected));
         };
       }
     }
@@ -208,12 +213,12 @@ public class AutosaverNode  : Node {
           break;
         case 2: 
           websocketConnected = true;
-          shouldBroadcast = true;
+          this.BroadcastDataInput(nameof(websocketConnected));
           break;
         case 5:
           if (message.d.eventType.Equals("StreamStateChanged")) {
             isEnabled = !message.d.eventData.outputActive;
-            shouldBroadcast = true;
+            this.BroadcastDataInput(nameof(isEnabled));
           }
           break;
       }
@@ -237,6 +242,8 @@ public class AutosaverNode  : Node {
 
     protected override void OnCreate()
     {
+      websocketConnected = false;
+      this.BroadcastDataInput(nameof(websocketConnected));
       _ws = new WebSocket($"ws://{websocketIP}:{websocketPort}");
       setupWebsocketHandlers();
 
@@ -266,14 +273,6 @@ public class AutosaverNode  : Node {
         debouncedSocketPort(to);
       });
 
-      Watch<bool>(nameof(isEnabled), (from, to) => {
-        shouldBroadcast = true;
-      });
-
-      Watch<bool>(nameof(websocketConnected), (from, to) => {
-        shouldBroadcast = true;
-      });
-
       Watch<bool>(nameof(websocketEnabled), (from, to) => {
         if (!to) {
           _ws.Close();
@@ -281,16 +280,18 @@ public class AutosaverNode  : Node {
       });
 
       Watch<string>(nameof(websocketPassword), (from, to) => {
+        websocketPassword = new System.String('*', to.Length);
         if (to.Length == 0) {
           websocketPasswordHidden = "";
         }
-        else if (to.Length > websocketPasswordHidden.Length) {
-          websocketPassword = new System.String('*', to.Length);
+        else if ((to.Length - websocketPasswordHidden.Length) == 1) {
           websocketPasswordHidden += to[to.Length - 1];
+        } else if ((to.Length - websocketPasswordHidden.Length) > 1) {
+          websocketPasswordHidden += to.Substring(0, to.Length);
         } else {
           websocketPasswordHidden = websocketPasswordHidden.Substring(0, to.Length);
         }
-        shouldBroadcast = true;
+        this.BroadcastDataInput(nameof(websocketPassword));
       });
 
       Watch<float>(nameof(saveTimeInSeconds), (from, to) => {
@@ -298,10 +299,9 @@ public class AutosaverNode  : Node {
           to = 1.0f;
           saveTimeInSeconds = to;
         } 
-
         float diff = from - to;
         nextSave -= diff;
-        shouldBroadcast = true;
+        this.BroadcastDataInput(nameof(saveTimeInSeconds));
       });
     }
 
@@ -310,10 +310,6 @@ public class AutosaverNode  : Node {
       {
           nextSave = Time.time + saveTimeInSeconds;
           AutoSave();
-      }
-      if (shouldBroadcast) {
-        this.Broadcast();
-        shouldBroadcast = false;
       }
     }
 
